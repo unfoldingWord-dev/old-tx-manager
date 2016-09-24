@@ -1,0 +1,20 @@
+language:
+- python
+python:
+- '2.7'
+before_install:
+- sudo apt-get install -y curl tar
+install:
+- pip install coveralls
+script: 
+- coverage run test-setup.py test
+after_success:
+- coveralls
+deploy:
+  provider: pypi
+  user: richmahn
+  password:
+    secure: "SpKGdQTVqMvQ0ui+82ONTIZqWzRNVx+yW9S++WMpdq7ITzxX7usumanFkPWQhNIokOF9Iz6CJl4hXpdLp9eDUvWW4EgPL/XI+XXUjSy/2Zma+tHOhatdw3HTaDg2uGcxqDXMGqJS1/gd1WBm8wTrXJnhZcAvrm812KJQmWu+903Rd1xnGThZLNCUpU9DFTn4ysuemn+0Vo4+eFZKT5bC0U0ItpqHDPE5COwd6U2RmEPkqhHKAUC5yjM4VivWzJpVKlbi3WvocikNYE7PE69FKfkeWNdDlAJAgYrPBIHr8MS+LpIEDShp2a46vLm/f1oRZz2K2S3LYTztXf++ECosfHKxp4bOUsEyrF7zLoouSi0egUZWjTI0tNx8ANPuPtJ5W7049jFr5oLLiXTG7EQ/2qIzFvu1RmDJoDWynGLwPWEtI4I1cbAK9V1TqY3RaYVmi+IMGQbs08VYgywciMDV381v/9919iZkb3qWWJWw6K6zINWSOpSaAkjDDdBR2oTPGXkdsHHjeescscQoBgU4FSL9qEnSz5goYp/aRCzIZNzbs8FOASZk3Tl/Ju/IKms/pa9cXhtutn2eBl6PIU8GPXjAXLGi+fFIYEVFczx4xc5lZOixk0nWbp02v0Mv1w7EOY2Tk/9eGV3jtQeB/vVoW8xmTHvc6WBQepW1eE6Y1NQ="
+  on:
+    tags: false
+  distributions: "sdist bdist_wheel"
