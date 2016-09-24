@@ -6,6 +6,7 @@ import hashlib
 from datetime import datetime
 from datetime import timedelta
 
+import json
 import requests
 
 from aws_tools.lambda_handler import LambdaHandler
@@ -19,31 +20,28 @@ class TxManager(object):
     JOB_TABLE_NAME = 'tx-job'
     MODULE_TABLE_NAME = 'tx-module'
 
-    def __init__(self, **kwargs):
-        # DEFAULTS
-        self.api_url = None
-        self.cdn_url = None
-        self.cdn_bucket = None
-        self.quiet = False
+    def __init__(self, api_url=None, gogs_url=None, cdn_url=None, cdn_bucket=None, quiet=False, aws_access_key_id=None, aws_secret_access_key=None, job_table_name=None, module_table_name=None):
+        self.api_url = api_url
+        self.cdn_url = cdn_url
+        self.cdn_bucket = cdn_bucket
+        self.quiet = quiet
+
         self.job_db_handler = None
         self.module_db_handler = None
-        self.gogs_url = None
         self.gogs_handler = None
-        self.job_table_name = self.JOB_TABLE_NAME
-        self.module_table_name = self.MODULE_TABLE_NAME
-        self.aws_access_key_id = None
-        self.aws_secret_access_key = None
 
-        # Get any passed arguments into existing attributes
-        for key, value in kwargs.iteritems():
-            if hasattr(self, key):
-                setattr(self, key, value)
+        if not job_table_name:
+            job_table_name = self.JOB_TABLE_NAME
+        if not module_table_name:
+            module_table_name = self.MODULE_TABLE_NAME
 
-        # Post process of arguments
-        if self.gogs_url:
-            self.gogs_handler = GogsHandler(self.gogs_url)
+        self.job_db_handler = DynamoDBHandler(job_table_name)
+        self.module_db_handler = DynamoDBHandler(module_table_name)
 
-        self.lambda_handler = LambdaHandler(self.aws_access_key_id, self.aws_secret_access_key)
+        if gogs_url:
+            self.gogs_handler = GogsHandler(gogs_url)
+
+        self.lambda_handler = LambdaHandler(aws_access_key_id, aws_secret_access_key)
 
     def debug_print(self, message):
         if not self.quiet:
@@ -55,9 +53,9 @@ class TxManager(object):
     def get_converter_module(self, job):
         modules = self.query_modules()
         for module in modules:
-            if job.resource_type in module['resource_types']:
-                if job.input_format in module['input_format']:
-                    if job.output_format in module['output_format']:
+            if job.resource_type in module.resource_types:
+                if job.input_format in module.input_format:
+                    if job.output_format in module.output_format:
                         return module
         return None
 
@@ -67,17 +65,20 @@ class TxManager(object):
 
         user = self.get_user(data['user_token'])
 
-        if not user:
+        if not user or not user.username:
             raise Exception('Invalid user_token. User not found.')
 
-        data['user'] = user
         del data['user_token']
+        data['user'] = user.username
 
         job = TxJob(data, self.quiet)
 
         if not job.cdn_bucket:
-            raise Exception('"cdn_bucket" not given.')
-        if job.source:
+            if not self.cdn_bucket:
+                raise Exception('"cdn_bucket" not given.')
+            else:
+                job.cdn_bucket = self.cdn_bucket
+        if not job.source:
             raise Exception('"source" url not given.')
         if not job.resource_type:
             raise Exception('"resource_type" not given.')
@@ -91,9 +92,10 @@ class TxManager(object):
         if not module:
             raise Exception('No converter was found to convert {0} from {1} to {2}'.format(job.resource_type, job.input_format, job.output_format))
 
-        job.convert_module = module
+        job.convert_module = module.name
         output_file = 'tx/job/{0}.zip'.format(job.job_id)  # All conversions must result in a ZIP of the converted file(s)
-        job.output = '{0}/{1}'.format(self.cdn_base_url, output_file)
+        job.output = '{0}/{1}'.format(self.cdn_url, output_file)
+        job.cdn_file = output_file
 
         created_at = datetime.utcnow()
         expires_at = created_at + timedelta(days=1)
@@ -102,9 +104,9 @@ class TxManager(object):
         job.created_at = created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
         job.expires_at = expires_at.strftime("%Y-%m-%dT%H:%M:%SZ")
         job.eta = eta.strftime("%Y-%m-%dT%H:%M:%SZ")
-        job.job_status = 'requested'
+        job.status = 'requested'
 
-        job_id = hashlib.sha256('{0}-{1}-{2}'.format(data['user_token'], user, created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))).hexdigest()
+        job_id = hashlib.sha256('{0}-{1}-{2}'.format(user.username, user.email, created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))).hexdigest()
         job.job_id = job_id
 
         job.links = {
@@ -142,7 +144,12 @@ class TxManager(object):
                 raise Exception('Invalid user_token. User not found.')
             data['user'] = user
             del data['user_token']
-        return self.query_jobs(data)
+        jobs = self.query_jobs(data)
+        ret = []
+        if jobs and len(jobs):
+            for job in jobs:
+                ret.append(job.get_db_data())
+        return ret
 
     def list_endpoints(self):
         return {
@@ -165,15 +172,16 @@ class TxManager(object):
         job = self.get_job(job_id)
 
         if not job:
-            raise Exception('Job not found: {0}'.format(job_id))
+            return  # Job doesn't exist, return
 
         # Only start the job if the status is 'requested' and a started timestamp hasn't been set
-        if job.job_status != 'requested' or job.start_at:
-            return
+        if job.status != 'requested' or job.started_at:
+            return  # Job already started, return
 
-        job.start_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        job.started_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         job.status = 'started'
         job.log_message('Started job {0} at {1}'.format(job_id, job.started_at))
+        success = False
 
         try:
             self.update_job(job)
@@ -182,54 +190,63 @@ class TxManager(object):
             if not module:
                 raise Exception('No converter was found to convert {0} from {1} to {2}'.format(job.resourse_type, job.import_format, job.output_format))
 
-            job.converter_module = module
+            job.converter_module = module.name
             self.update_job(job)
 
             payload = {
                 'data': {
-                    'job': job,
+                    'job': job.get_db_data(),
                 }
             }
-            print("Payload to {0}:".format(module['name']))
+            print("Payload to {0}:".format(module.name))
             print(payload)
 
             job.log_message('Telling module {0} to convert {1} and put at {2}'.format(job.converter_module, job.source, job.output))
-            response = self.aws_handler.lambda_invoke(module['name'], payload)
-            print("Response payload from {0}:".format(module['name']))
+            response = self.lambda_handler.invoke(module.name, payload)
+
+            print("Response from {0}:".format(module.name))
             print(response)
 
             if 'errorMessage' in response:
-                job.error_message(response['errorMessage'], module['name'])
-            else:
-                for message in response['log']:
+                job.error_message(response['errorMessage'])
+            elif 'Payload' in response:
+                payload = json.loads(response['Payload'].read())
+
+                print('Payload from payload:')
+                print(payload)
+
+                for message in payload['log']:
                     job.log_message(message)
-                for message in response['errors']:
+                for message in payload['errors']:
                     job.error_message(message)
-                for message in response['warnings']:
+                for message in payload['warnings']:
                     job.warning_message(message)
 
-                if response['errors']:
-                    job.log_message('{0} function returned with errors.'.format(module['name']))
-                elif response['warnings']:
-                    job.log_message('{0} function returned with warnings.'.format(module['name']))
-                if response['errors']:
-                    job.log_message('{0} function returned.'.format(module['name']))
+                success = payload['success']
+
+                if payload['errors']:
+                    job.log_message('{0} function returned with errors.'.format(module.name))
+                elif payload['warnings']:
+                    job.log_message('{0} function returned with warnings.'.format(module.name))
+                elif payload['log']:
+                    job.log_message('{0} function returned.'.format(module.name))
+
         except Exception as e:
             job.error_message(e.message)
 
         job.ended_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        if len(job.errors):
+        if not success or len(job.errors):
             job.success = False
-            job.job_status = "failed"
+            job.status = "failed"
             message = "Conversion failed"
         elif len(job.warnings) > 0:
             job.success = True
-            job.job_status = "warnings"
+            job.status = "warnings"
             message = "Conversion successful with warnings"
         else:
             job.success = True
-            job.job_status = "success"
+            job.status = "success"
             message = "Conversion successful"
 
         job.log_message(message)
@@ -241,7 +258,7 @@ class TxManager(object):
             "job_id": job.job_id,
             "identifier": job.identifier,
             "success": job.success,
-            "status": job.job_status,
+            "status": job.status,
             "message": message,
             "output": job.output,
             "output_expiration": job.output_expiration,
@@ -360,9 +377,6 @@ class TxManager(object):
         if not module.resource_types:
             raise Exception('"resource_types" not given.')
 
-        self.debug_print("module payload:")
-        self.debug_print(module)
-
         self.insert_module(module)
         self.make_api_gateway_for_module(module)  # Todo: develop this function
         return module.get_db_data()
@@ -372,26 +386,36 @@ class TxManager(object):
         self.job_db_handler.insert_item(job_data)
 
     def query_jobs(self, data=None):
-        return self.job_db_handler.query_items(data)
+        items = self.job_db_handler.query_items(data)
+        modules = []
+        if items and len(items):
+            for item in items:
+                modules.append(TxModule(item))
+        return modules
 
     def get_job(self, job_id):
-        return self.job_db_handler.get_item({'job_id':job_id})
+        return TxJob(self.job_db_handler.get_item({'job_id':job_id}))
 
     def update_job(self, job):
-        return self.job_db_handler.update_item({'job_id':job.job_id}, job.get_db_data())
+        return self.job_db_handler.update_item({'job_id': job.job_id}, job.get_db_data())
 
     def delete_job(self, job):
-        return self.job_db_handler.delete_item({'job_id':job.job_id})
+        return self.job_db_handler.delete_item({'job_id': job.job_id})
 
     def insert_module(self, module):
         module_data = module.get_db_data()
         self.module_db_handler.insert_item(module_data)
 
     def query_modules(self, data=None):
-        return self.module_db_handler.query_items(data)
+        items = self.module_db_handler.query_items(data)
+        modules = []
+        if items and len(items):
+            for item in items:
+                modules.append(TxModule(item))
+        return modules
 
     def get_module(self, name):
-        return self.module_db_handler.get_item({'name': name})
+        return TxModule(self.module_db_handler.get_item({'name': name}))
 
     def update_module(self, module):
         return self.module_db_handler.update_item({'name': module.name}, module.get_db_data())

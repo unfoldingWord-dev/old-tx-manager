@@ -12,11 +12,7 @@ def read(f_name):
 setup(
     name="tx-manager",
     packages=['tx_manager'],
-<<<<<<< HEAD
-    version="0.0.8",
-=======
-    version="0.0.5",
->>>>>>> 86c6994... Updated argument handling
+    version="0.1.23",
     author="unfoldingWord",
     author_email="unfoldingword.org",
     description="Classes for executing tX Manager",
