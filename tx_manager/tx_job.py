@@ -22,12 +22,12 @@ class TxJob(TxObject):
         'source',
         'output_format',
         'output',
-        'output_expiration',
         'cdn_bucket',
         'cdn_file',
         'callback',
         'links',
         'status',
+        'success',
         'log',
         'warnings',
         'errors'
@@ -49,12 +49,12 @@ class TxJob(TxObject):
         self.source = None
         self.output_format = None
         self.output = None
-        self.output_expiration = None
         self.cdn_bucket = None
         self.cdn_file = None
         self.callback = None
         self.links = []
         self.status = None
+        self.success = False
         self.api_base_url = None
         self.cdn_base_url = None
         self.log = []

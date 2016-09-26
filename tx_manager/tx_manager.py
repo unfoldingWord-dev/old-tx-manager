@@ -254,21 +254,9 @@ class TxManager(object):
 
         self.update_job(job)
 
-        callback_payload = {
-            "job_id": job.job_id,
-            "identifier": job.identifier,
-            "success": job.success,
-            "status": job.status,
-            "message": message,
-            "output": job.output,
-            "output_expiration": job.output_expiration,
-            "log": job.log,
-            "warnings": job.warnings,
-            "errors": job.errors,
-            "created_at": job.created_at,
-            "started_at": job.started_at,
-            "ended_at": job.ended_at
-        }
+        callback_payload = job.get_db_data()
+
+        callback_payload["message"] = message
 
         if job.callback:
             self.do_callback(job.callback, callback_payload)
