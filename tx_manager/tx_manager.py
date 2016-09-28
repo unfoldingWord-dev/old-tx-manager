@@ -105,6 +105,7 @@ class TxManager(object):
         job.expires_at = expires_at.strftime("%Y-%m-%dT%H:%M:%SZ")
         job.eta = eta.strftime("%Y-%m-%dT%H:%M:%SZ")
         job.status = 'requested'
+        job.message = 'Conversion requested...'
 
         job_id = hashlib.sha256('{0}-{1}-{2}'.format(user.username, user.email, created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))).hexdigest()
         job.job_id = job_id
@@ -180,6 +181,7 @@ class TxManager(object):
 
         job.started_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         job.status = 'started'
+        job.message = 'Conversion started...'
         job.log_message('Started job {0} at {1}'.format(job_id, job.started_at))
         success = False
 
@@ -249,6 +251,7 @@ class TxManager(object):
             job.status = "success"
             message = "Conversion successful"
 
+        job.message = message
         job.log_message(message)
         job.log_message('Finished job {0} at {1}'.format(job.job_id, job.ended_at))
 

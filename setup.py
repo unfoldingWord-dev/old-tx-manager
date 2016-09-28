@@ -12,9 +12,9 @@ def read(f_name):
 setup(
     name="tx-manager",
     packages=['tx_manager'],
-    version="0.1.26",
+    version="0.1.27",
     author="unfoldingWord",
-    author_email="unfoldingword.org",
+    author_email="info@unfoldingword.org",
     description="Classes for executing tX Manager",
     license="MIT",
     keywords="tX manager",

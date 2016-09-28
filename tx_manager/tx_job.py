@@ -28,6 +28,7 @@ class TxJob(TxObject):
         'links',
         'status',
         'success',
+        'message',
         'log',
         'warnings',
         'errors'
@@ -55,6 +56,7 @@ class TxJob(TxObject):
         self.links = []
         self.status = None
         self.success = False
+        self.message = None
         self.api_base_url = None
         self.cdn_base_url = None
         self.log = []
