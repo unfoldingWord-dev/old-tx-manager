@@ -55,7 +55,7 @@ class TxJob(TxObject):
         self.callback = None
         self.links = []
         self.status = None
-        self.success = False
+        self.success = None
         self.message = None
         self.api_base_url = None
         self.cdn_base_url = None
