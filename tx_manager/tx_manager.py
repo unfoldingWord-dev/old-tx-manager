@@ -218,11 +218,14 @@ class TxManager(object):
                 print(payload)
 
                 for message in payload['log']:
-                    job.log_message(message)
+                    if message:
+                        job.log_message(message)
                 for message in payload['errors']:
-                    job.error_message(message)
+                    if message:
+                        job.error_message(message)
                 for message in payload['warnings']:
-                    job.warning_message(message)
+                    if message:
+                        job.warning_message(message)
 
                 success = payload['success']
 
@@ -232,9 +235,8 @@ class TxManager(object):
                     job.log_message('{0} function returned with warnings.'.format(module.name))
                 elif payload['log']:
                     job.log_message('{0} function returned.'.format(module.name))
-
         except Exception as e:
-            job.error_message(e.message)
+            job.error_message('Failed with message: {0}'.format(e.message))
 
         job.ended_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
