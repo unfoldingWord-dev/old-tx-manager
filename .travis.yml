@@ -7,7 +7,8 @@ before_install:
 install:
 - pip install coveralls
 script: 
-- coverage run test-setup.py test
+- ls -l .
+#- coverage run test-setup.py test
 after_success:
 - coveralls
 deploy:
