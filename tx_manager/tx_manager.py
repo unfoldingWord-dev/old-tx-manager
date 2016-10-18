@@ -190,7 +190,8 @@ class TxManager(object):
 
             module = self.get_converter_module(job)
             if not module:
-                raise Exception('No converter was found to convert {0} from {1} to {2}'.format(job.resourse_type, job.import_format, job.output_format))
+                raise Exception('No converter was found to convert {0} from {1} to {2}'
+                                .format(job.resource_type, job.input_format, job.output_format))
 
             job.converter_module = module.name
             self.update_job(job)
@@ -383,7 +384,7 @@ class TxManager(object):
         modules = []
         if items and len(items):
             for item in items:
-                modules.append(TxModule(item))
+                modules.append(TxJob(item))
         return modules
 
     def get_job(self, job_id):

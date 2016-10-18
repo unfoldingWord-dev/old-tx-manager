@@ -24,5 +24,6 @@ setup(
     install_requires=[
         'requests',
         'tx-shared-tools'
-    ]
+    ],
+    test_suite="tests"
 )
